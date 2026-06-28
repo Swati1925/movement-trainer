@@ -1,4 +1,17 @@
 # Dev Log
+## Day 2 — 28 June 2026
+
+- Created Supabase project (movement-trainer), region: Mumbai (ap-south-1)
+- Set up frontend/.env and backend/.env with Supabase URL + anon key (excluded from Git)
+- Installed @supabase/supabase-js and react-router-dom
+- Created src/lib/supabase.js — shared Supabase client setup
+- Built Signup.jsx, Login.jsx, Home.jsx pages
+- Wired up routing in App.jsx (/, /login, /signup)
+- Tested full flow: signed up a real user, confirmed in Supabase Auth dashboard, logged in, logged out — all working
+- Disabled "Confirm email" temporarily for faster local testing (will re-enable before deployment)
+- Fixed a CSS bug from Vite's starter template causing heading text overlap on Home page
+
+**Status:** Auth flow fully functional end-to-end. Next: webcam feed + MediaPipe pose detection (final Week 1 goal).
 
 ## Day 1 — 28 June 2026
 
