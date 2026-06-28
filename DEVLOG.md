@@ -1,4 +1,18 @@
 # Dev Log
+## Day 2 (continued) — Webcam + MediaPipe
+
+- Installed @mediapipe/tasks-vision
+- Built PoseCamera.jsx: webcam feed + canvas overlay
+- Loaded MediaPipe PoseLandmarker model (lite version, GPU delegate)
+- Implemented real-time detection loop using requestAnimationFrame
+- Drew skeleton (33 landmarks + connections) live on canvas, mirrored to match webcam
+- Confirmed: skeleton tracks body movement in real time, no lag
+
+**WEEK 1 GOAL COMPLETE:** Log in → open app → see body tracked with dots and lines. 
+All of Week 1 (auth + camera + pose detection) finished in Day 2.
+
+**Next (Week 2):** Joint angle calculations for squat/push-up/lunge, rep counter, accuracy scoring, real-time text + voice feedback.
+
 ## Day 2 — 28 June 2026
 
 - Created Supabase project (movement-trainer), region: Mumbai (ap-south-1)
