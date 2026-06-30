@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Chat from './pages/Chat'
 import Exercises from './pages/Exercises'
+import Dashboard from './pages/Dashboard'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/chat" element={<Chat />} />
         <Route path="/exercises" element={<Exercises />} />
         <Route path="/exercise/:exerciseKey" element={<Home />} />
+        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </BrowserRouter>
   )

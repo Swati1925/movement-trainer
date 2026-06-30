@@ -39,6 +39,12 @@ function Home() {
         >
           📋 Exercise Library
         </button>
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{ padding: '8px 16px' }}
+        >
+          📊 Dashboard
+        </button>
       </div>
       <PoseCamera
         userId={userId}
