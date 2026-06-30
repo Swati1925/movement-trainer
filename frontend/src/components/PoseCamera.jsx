@@ -2,8 +2,9 @@ import { useRef, useEffect, useState } from 'react'
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision'
 import { processExercise } from '../utils/poseUtils'
 import { EXERCISE_CONFIG } from '../config/exerciseConfig'
+import { getAISummary, saveSession } from '../lib/api'
 
-function PoseCamera({ exerciseKey = 'squat' }) {
+function PoseCamera({ exerciseKey = 'squat', userId }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const [loading, setLoading] = useState(true)
@@ -12,8 +13,10 @@ function PoseCamera({ exerciseKey = 'squat' }) {
   const stageRef = useRef('up')
   const repCountRef = useRef(0)
   const lastUIUpdateRef = useRef(0)
+  const accuracyHistoryRef = useRef([]) // tracks every accuracy reading for avg calculation
+  const sessionStartTimeRef = useRef(Date.now())
 
-  // What's actually shown on screen — updated only a few times per second, not every frame
+  // What's shown on screen during a live session
   const [displayStats, setDisplayStats] = useState({
     reps: 0,
     accuracy: 0,
@@ -23,10 +26,19 @@ function PoseCamera({ exerciseKey = 'squat' }) {
     visible: false,
   })
 
+  // Post-session state
+  const [sessionEnded, setSessionEnded] = useState(false)
+  const [finalStats, setFinalStats] = useState(null)
+  const [summary, setSummary] = useState(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState(null)
+
+  // Refs for cleanup
+  const streamRef = useRef(null)
+  const animationFrameRef = useRef(null)
+  const poseLandmarkerRef = useRef(null)
+
   useEffect(() => {
-    let stream
-    let poseLandmarker
-    let animationFrameId
     let lastVideoTime = -1
 
     async function setup() {
@@ -34,7 +46,7 @@ function PoseCamera({ exerciseKey = 'squat' }) {
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
       )
 
-      poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      poseLandmarkerRef.current = await PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath:
             'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
@@ -44,11 +56,11 @@ function PoseCamera({ exerciseKey = 'squat' }) {
         numPoses: 1,
       })
 
-      stream = await navigator.mediaDevices.getUserMedia({
+      streamRef.current = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
       })
       if (videoRef.current) {
-        videoRef.current.srcObject = stream
+        videoRef.current.srcObject = streamRef.current
         videoRef.current.addEventListener('loadeddata', () => {
           setLoading(false)
           predictLoop()
@@ -59,13 +71,13 @@ function PoseCamera({ exerciseKey = 'squat' }) {
     function predictLoop() {
       const video = videoRef.current
       const canvas = canvasRef.current
-      if (!video || !canvas || !poseLandmarker) return
+      if (!video || !canvas || !poseLandmarkerRef.current) return
 
       const ctx = canvas.getContext('2d')
 
       if (video.currentTime !== lastVideoTime) {
         lastVideoTime = video.currentTime
-        const result = poseLandmarker.detectForVideo(video, performance.now())
+        const result = poseLandmarkerRef.current.detectForVideo(video, performance.now())
 
         ctx.save()
         ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -74,7 +86,6 @@ function PoseCamera({ exerciseKey = 'squat' }) {
           const landmarks = result.landmarks[0]
           drawSkeleton(ctx, landmarks, canvas.width, canvas.height)
 
-          // Run the generic exercise engine on this frame
           const config = EXERCISE_CONFIG[exerciseKey]
           const exerciseResult = processExercise(
             landmarks,
@@ -87,6 +98,10 @@ function PoseCamera({ exerciseKey = 'squat' }) {
           if (now - lastUIUpdateRef.current > 200) {
             lastUIUpdateRef.current = now
             if (exerciseResult) {
+              // Track accuracy readings for final average
+              if (exerciseResult.accuracy > 0) {
+                accuracyHistoryRef.current.push(exerciseResult.accuracy)
+              }
               setDisplayStats({ ...exerciseResult, visible: true })
             } else {
               setDisplayStats((prev) => ({ ...prev, visible: false }))
@@ -96,18 +111,145 @@ function PoseCamera({ exerciseKey = 'squat' }) {
         ctx.restore()
       }
 
-      animationFrameId = requestAnimationFrame(predictLoop)
+      animationFrameRef.current = requestAnimationFrame(predictLoop)
     }
 
     setup()
 
     return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId)
-      if (stream) stream.getTracks().forEach((track) => track.stop())
-      if (poseLandmarker) poseLandmarker.close()
+      stopCamera()
     }
   }, [exerciseKey])
 
+  function stopCamera() {
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop())
+    if (poseLandmarkerRef.current) poseLandmarkerRef.current.close()
+  }
+
+  function handleEndSession() {
+    stopCamera()
+
+    const accuracies = accuracyHistoryRef.current
+    const avgAccuracy = accuracies.length > 0
+      ? Math.round(accuracies.reduce((a, b) => a + b, 0) / accuracies.length)
+      : 0
+    const durationSeconds = Math.round((Date.now() - sessionStartTimeRef.current) / 1000)
+
+    const stats = {
+      exercise: exerciseKey,
+      reps: repCountRef.current,
+      avg_accuracy: avgAccuracy,
+      rep_accuracies: accuracies,
+      duration_seconds: durationSeconds,
+    }
+
+    setFinalStats(stats)
+    setSessionEnded(true)
+
+    // Save to Supabase in the background — don't block the UI on this
+    if (userId) {
+      saveSession({ user_id: userId, ...stats }).catch((err) =>
+        console.error('Failed to save session:', err)
+      )
+    }
+  }
+
+  async function handleViewSummary() {
+    if (!finalStats) return
+    setSummaryLoading(true)
+    setSummaryError(null)
+    try {
+      const data = await getAISummary(userId || '00000000-0000-0000-0000-000000000000', finalStats)
+      setSummary(data.summary)
+    } catch (err) {
+      setSummaryError('Could not load summary. Please try again.')
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
+
+  function handleStartAgain() {
+    // Reset all state for a new session
+    stageRef.current = 'up'
+    repCountRef.current = 0
+    accuracyHistoryRef.current = []
+    sessionStartTimeRef.current = Date.now()
+    setDisplayStats({ reps: 0, accuracy: 0, angle: 0, stage: 'up', feedback: null, visible: false })
+    setSessionEnded(false)
+    setFinalStats(null)
+    setSummary(null)
+    setSummaryError(null)
+    // Reload the page to restart the camera cleanly
+    window.location.reload()
+  }
+
+  // ── Post-session screen ──────────────────────────────────────────────────
+  if (sessionEnded && finalStats) {
+    return (
+      <div style={{ maxWidth: '640px', fontSize: '18px' }}>
+        <h2>Session Complete! 🎉</h2>
+        <p>Exercise: {EXERCISE_CONFIG[exerciseKey].label}</p>
+        <p>Reps: {finalStats.reps}</p>
+        <p>Avg Accuracy: {finalStats.avg_accuracy}%</p>
+        <p>Duration: {Math.floor(finalStats.duration_seconds / 60)}m {finalStats.duration_seconds % 60}s</p>
+
+        <div style={{ marginTop: '20px', display: 'flex', gap: '12px' }}>
+          {!summary && (
+            <button
+              onClick={handleViewSummary}
+              disabled={summaryLoading}
+              style={{
+                padding: '10px 20px',
+                fontSize: '16px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: summaryLoading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {summaryLoading ? 'Loading summary...' : 'View AI Summary'}
+            </button>
+          )}
+          <button
+            onClick={handleStartAgain}
+            style={{
+              padding: '10px 20px',
+              fontSize: '16px',
+              backgroundColor: '#16a34a',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+            }}
+          >
+            Start Again
+          </button>
+        </div>
+
+        {summaryError && (
+          <p style={{ color: 'red', marginTop: '12px' }}>{summaryError}</p>
+        )}
+
+        {summary && (
+          <div style={{
+            marginTop: '20px',
+            padding: '16px',
+            backgroundColor: '#f0f9ff',
+            borderRadius: '8px',
+            borderLeft: '4px solid #2563eb',
+            lineHeight: '1.6',
+          }}>
+            <p style={{ fontWeight: 'bold', marginBottom: '8px' }}>AI Coach Summary</p>
+            <p>{summary}</p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Live session screen ──────────────────────────────────────────────────
   return (
     <div>
       <div style={{ position: 'relative', width: '640px', height: '480px' }}>
@@ -151,6 +293,22 @@ function PoseCamera({ exerciseKey = 'squat' }) {
             {displayStats.feedback}
           </p>
         )}
+
+        <button
+          onClick={handleEndSession}
+          style={{
+            marginTop: '16px',
+            padding: '10px 20px',
+            fontSize: '16px',
+            backgroundColor: '#dc2626',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+          }}
+        >
+          End Session
+        </button>
       </div>
     </div>
   )
