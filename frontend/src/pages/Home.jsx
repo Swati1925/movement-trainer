@@ -26,6 +26,12 @@ function Home() {
       <button onClick={handleLogout} style={{ padding: '8px 16px', marginBottom: '20px' }}>
         Log Out
       </button>
+      <button
+        onClick={() => navigate('/chat')}
+        style={{ padding: '8px 16px', marginBottom: '20px', marginLeft: '12px' }}
+      >
+        💬 AI Coach Chat
+      </button>
       <PoseCamera userId={userId} />
     </div>
   )
