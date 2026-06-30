@@ -3,6 +3,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Chat from './pages/Chat'
+import Exercises from './pages/Exercises'
 
 function App() {
   return (
@@ -12,6 +13,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/exercises" element={<Exercises />} />
+        <Route path="/exercise/:exerciseKey" element={<Home />} />
       </Routes>
     </BrowserRouter>
   )

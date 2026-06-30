@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import PoseCamera from '../components/PoseCamera'
 
 function Home() {
-  const navigate = useNavigate()
   const [userId, setUserId] = useState(null)
+  const navigate = useNavigate()
+  const { exerciseKey } = useParams()
 
   // Get the logged-in user's ID when the page loads
   useEffect(() => {
@@ -21,18 +22,28 @@ function Home() {
 
   return (
     <div style={{ maxWidth: '700px', margin: '50px auto', padding: '20px' }}>
-      <h1>Movement Trainer — Home</h1>
-      <p>You are logged in. This is the home screen.</p>
-      <button onClick={handleLogout} style={{ padding: '8px 16px', marginBottom: '20px' }}>
-        Log Out
-      </button>
-      <button
-        onClick={() => navigate('/chat')}
-        style={{ padding: '8px 16px', marginBottom: '20px', marginLeft: '12px' }}
-      >
-        💬 AI Coach Chat
-      </button>
-      <PoseCamera userId={userId} />
+      <h1>Movement Trainer</h1>
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+        <button onClick={handleLogout} style={{ padding: '8px 16px' }}>
+          Log Out
+        </button>
+        <button
+          onClick={() => navigate('/chat')}
+          style={{ padding: '8px 16px' }}
+        >
+          💬 AI Coach Chat
+        </button>
+        <button
+          onClick={() => navigate('/exercises')}
+          style={{ padding: '8px 16px' }}
+        >
+          📋 Exercise Library
+        </button>
+      </div>
+      <PoseCamera
+        userId={userId}
+        exerciseKey={exerciseKey || 'squat'}
+      />
     </div>
   )
 }
