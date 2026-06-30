@@ -3,7 +3,7 @@ import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision'
 import { processExercise } from '../utils/poseUtils'
 import { EXERCISE_CONFIG } from '../config/exerciseConfig'
 import { getAISummary, saveSession } from '../lib/api'
-
+import { handleVoiceFeedback } from '../utils/voiceUtils'
 function PoseCamera({ exerciseKey = 'squat', userId }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -102,6 +102,13 @@ function PoseCamera({ exerciseKey = 'squat', userId }) {
               if (exerciseResult.accuracy > 0) {
                 accuracyHistoryRef.current.push(exerciseResult.accuracy)
               }
+
+              // Voice feedback — check if a rep just completed
+              const repJustCompleted = exerciseResult.reps > repCountRef.current - 1 &&
+                exerciseResult.stage === 'up' &&
+                exerciseResult.reps > 0
+              handleVoiceFeedback(exerciseResult.accuracy, repJustCompleted)
+
               setDisplayStats({ ...exerciseResult, visible: true })
             } else {
               setDisplayStats((prev) => ({ ...prev, visible: false }))

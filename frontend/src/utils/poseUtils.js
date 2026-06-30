@@ -1,4 +1,3 @@
-console.log('POSEUTILS FILE LOADED - TEST 12345')
 import { LANDMARK_INDEX } from '../config/exerciseConfig'
 
 // Calculates the angle (in degrees) at point b, formed by points a-b-c.
